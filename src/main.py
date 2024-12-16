@@ -1,47 +1,50 @@
+from model import GraphormerLightningModule
+from datamodule import GraphormerDataModule
+from pytorch_lightning import Trainer
 from transformers import GraphormerConfig
-import torch
-from torch.utils.data import DataLoader
-import pytorch_lightning as pl
-from datamodule import GraphDataset
-from model import GraphormerRegressionModule
+from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
+from pytorch_lightning.loggers import WandbLogger
+from hparam import Hyperparameters
 
-# Example data and labels
-dummy_data = [
-    {
-        "input_nodes": torch.randint(0, 4608, (512,)),
-        "input_edges": torch.randint(0, 1536, (512, 512)),
-        "attn_bias": torch.rand(512, 512),
-        "in_degree": torch.randint(0, 512, (512,)),
-        "out_degree": torch.randint(0, 512, (512,)),
-        "spatial_pos": torch.randint(0, 1024, (512, 512)),
-    }
-    for _ in range(100)
-]
-dummy_labels = torch.rand(100)  # Regression targets
+# Path to the dataset CSV file
+csv_path = "data/syntatics.csv"
+check_mode = True
 
-# Create Dataset and Dataloader
-train_dataset = GraphDataset(dummy_data, dummy_labels)
-train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
-
-# Configuration for Graphormer
-config = GraphormerConfig(
-    num_classes=1,  # Regression task
-    num_atoms=4608,
-    num_edges=1536,
-    num_in_degree=512,
-    num_out_degree=512,
-    num_attention_heads=32,
-    num_hidden_layers=12,
-    max_nodes=512,
-    embedding_dim=768,
-    ffn_embedding_dim=768,
+# Initialize the data module
+data_module = GraphormerDataModule(
+    csv_path=csv_path,
+    batch_size=Hyperparameters.batch_size,
+    train_split=Hyperparameters.train_size,
+    val_split=Hyperparameters.val_size,
+    test_split=Hyperparameters.test_size,
 )
 
-# Initialize the Lightning Module
-model = GraphormerRegressionModule(config)
+# Prepare and set up the data
+data_module.prepare_data()
+data_module.setup()
 
-# PyTorch Lightning Trainer
-trainer = pl.Trainer(max_epochs=10, gpus=1 if torch.cuda.is_available() else 0)
+# Set up callbacks and logger
+lr_monitor = LearningRateMonitor(logging_interval='epoch')
+wandb_logger = WandbLogger(project='Graphormer-Molecule', save_dir='wandb_log')
+check_point = ModelCheckpoint(monitor='val_loss')
+    
+# Model configuration
+config = GraphormerConfig(num_classes=1, 
+                          num_hidden_layers=Hyperparameters.num_hidden_layers, 
+                          hidden_size=Hyperparameters.hidden_size, 
+                          num_attention_heads=Hyperparameters.num_attention_heads,)
 
-# Train the model
-trainer.fit(model, train_loader)
+# Instantiate model and trainer
+model = GraphormerLightningModule(config=config, learning_rate=1e-4)
+trainer = Trainer(devices='auto',
+                  accelerator='cpu',
+                  max_epochs=Hyperparameters.max_epoch,
+                  min_epochs=Hyperparameters.min_epoch,
+                  logger=wandb_logger,
+                  callbacks=[lr_monitor, check_point],
+                  fast_dev_run=check_mode,
+                  log_every_n_steps=250)
+
+# Train and test the model
+trainer.fit(model, datamodule=data_module)
+#trainer.validate(model, datamodule=data_module, ckpt_path='best')

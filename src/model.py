@@ -1,45 +1,26 @@
-import torch
 import pytorch_lightning as pl
-from transformers import GraphormerConfig, GraphormerForGraphClassification
+import torch
+from transformers import GraphormerForGraphClassification
 
-# Lightning Module for Regression
-class GraphormerRegressionModule(pl.LightningModule):
-    def __init__(self, config):
+class GraphormerLightningModule(pl.LightningModule):
+    def __init__(self, config, learning_rate=1e-3):
         super().__init__()
         self.model = GraphormerForGraphClassification(config)
-        self.criterion = torch.nn.MSELoss()  # Loss function for regression
+        self.learning_rate = learning_rate
 
-    def forward(self, input_nodes, input_edges, attn_bias, in_degree, out_degree, spatial_pos):
-        return self.model(
-            input_nodes=input_nodes,
-            input_edges=input_edges,
-            attn_bias=attn_bias,
-            in_degree=in_degree,
-            out_degree=out_degree,
-            spatial_pos=spatial_pos
-        )
+    def forward(self, batch):
+        return self.model(**batch)
 
     def training_step(self, batch, batch_idx):
-        inputs, labels = batch
-        outputs = self(**inputs, labels=labels)
-        loss = outputs.loss
-        self.log("train_loss", loss)
+        outputs = self(batch)
+        loss = outputs.loss  # Graphormer automatically computes loss if "labels" are in batch
+        self.log("train_loss", loss, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        inputs, labels = batch
-        outputs = self(**inputs, labels=labels)
+        outputs = self(batch)
         loss = outputs.loss
-        self.log("val_loss", loss)
-        return loss
-
-    def test_step(self, batch, batch_idx):
-        inputs, labels = batch
-        outputs = self(**inputs, labels=labels)
-        loss = outputs.loss
-        self.log("test_loss", loss)
-        return loss
+        self.log("val_loss", loss, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=1e-4)
-        return optimizer
+        return torch.optim.AdamW(self.parameters(), lr=self.learning_rate)
