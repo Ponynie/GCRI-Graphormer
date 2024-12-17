@@ -35,7 +35,13 @@ config = GraphormerConfig(num_classes=1,
                           num_attention_heads=Hyperparameters.num_attention_heads,)
 
 # Instantiate model and trainer
-model = GraphormerLightningModule(config=config, learning_rate=1e-4)
+model = GraphormerLightningModule(config=config, learning_rate=Hyperparameters.learning_rate)
+# model = GraphormerLightningModule(config=config, learning_rate=Hyperparameters.learning_rate, 
+#                                   pretrain=True, 
+#                                   model_name="clefourrier/pcqm4mv2_graphormer_base", 
+#                                   pretrain_num_classes=1)
+
+
 trainer = Trainer(devices='auto',
                   accelerator='cpu',
                   max_epochs=Hyperparameters.max_epoch,

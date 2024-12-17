@@ -3,6 +3,7 @@
 import os
 
 class Hyperparameters:
+    pretrain = False
     max_epoch = 20
     min_epoch = 2
     batch_size = 2
