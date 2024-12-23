@@ -7,8 +7,8 @@ from pytorch_lightning.loggers import WandbLogger
 from hparam import Hyperparameters
 
 # Path to the dataset CSV file
-csv_path = "data/syntatics.csv"
-check_mode = True
+csv_path = "data/NP-LRI-RAMP-G-C.csv"
+check_mode = Hyperparameters.check_mode
 
 # Initialize the data module
 data_module = GraphormerDataModule(
@@ -35,22 +35,24 @@ config = GraphormerConfig(num_classes=1,
                           num_attention_heads=Hyperparameters.num_attention_heads,)
 
 # Instantiate model and trainer
-model = GraphormerLightningModule(config=config, learning_rate=Hyperparameters.learning_rate)
-# model = GraphormerLightningModule(config=config, learning_rate=Hyperparameters.learning_rate, 
-#                                   pretrain=True, 
-#                                   model_name="clefourrier/pcqm4mv2_graphormer_base", 
-#                                   pretrain_num_classes=1)
-
+if not Hyperparameters.pretrain:
+    model = GraphormerLightningModule(config=config, learning_rate=Hyperparameters.learning_rate)
+else:
+    model = GraphormerLightningModule(config=None, learning_rate=Hyperparameters.learning_rate, 
+                                      pretrain=True, 
+                                      model_name=Hyperparameters.pretrain_model, 
+                                      pretrain_num_classes=1)
 
 trainer = Trainer(devices='auto',
-                  accelerator='cpu',
+                  accelerator='auto',
                   max_epochs=Hyperparameters.max_epoch,
                   min_epochs=Hyperparameters.min_epoch,
                   logger=wandb_logger,
                   callbacks=[lr_monitor, check_point],
                   fast_dev_run=check_mode,
-                  log_every_n_steps=250)
+                  log_every_n_steps=50)
 
 # Train and test the model
 trainer.fit(model, datamodule=data_module)
-#trainer.validate(model, datamodule=data_module, ckpt_path='best')
+if not check_mode:
+    trainer.validate(model, datamodule=data_module, ckpt_path='best')
