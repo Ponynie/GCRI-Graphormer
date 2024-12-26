@@ -1,17 +1,10 @@
 import pytorch_lightning as pl
 import torch
 from transformers import GraphormerForGraphClassification
+from datamodule import GraphDataset
 
 class GraphormerLightningModule(pl.LightningModule):
     def __init__(self, config, learning_rate=1e-3, pretrain=False, model_name=None, pretrain_num_classes=1):
-        """
-        Args:
-            config: Graphormer configuration.
-            learning_rate: Learning rate for the optimizer.
-            pretrain: Boolean, whether to use a pretrained model.
-            model_name: Pretrained model name (required if pretrain=True).
-            num_classes: Number of output classes for the classification task.
-        """
         super().__init__()
         if pretrain:
             if not model_name:
@@ -26,25 +19,76 @@ class GraphormerLightningModule(pl.LightningModule):
             self.model = GraphormerForGraphClassification(config)
         
         self.learning_rate = learning_rate
+        # We'll save these during setup
+        self.max_ri = None
+        self.min_ri = None
+        self.mae_criterion = torch.nn.L1Loss()
 
     def forward(self, batch):
         return self.model(**batch)
 
+    def setup(self, stage=None):
+        """Called on every GPU"""
+        # Get scaling factors from the dataset
+        if isinstance(self.trainer.datamodule.pytorch_dataset, GraphDataset):
+            self.max_ri = self.trainer.datamodule.pytorch_dataset.max_ri
+            self.min_ri = self.trainer.datamodule.pytorch_dataset.min_ri
+
+    def unscale_predictions(self, scaled_values):
+        """Convert scaled predictions back to original range"""
+        return scaled_values * (self.max_ri - self.min_ri) + self.min_ri
+
     def training_step(self, batch, batch_idx):
         outputs = self(batch)
-        loss = outputs.loss  # Graphormer automatically computes loss if "labels" are in batch
+        loss = outputs.loss
+        
+        # Calculate scaled MAE (0-1 range)
+        scaled_mae = self.mae_criterion(outputs.logits.squeeze(), batch['labels'].float())
+        
+        # Calculate unscaled MAE (original range)
+        predictions_unscaled = self.unscale_predictions(outputs.logits.squeeze())
+        labels_unscaled = self.unscale_predictions(batch['labels'].float())
+        unscaled_mae = self.mae_criterion(predictions_unscaled, labels_unscaled)
+        
+        # Log both metrics
         self.log("train_loss", loss, prog_bar=True, logger=True)
+        self.log("train_mae_scaled", scaled_mae, prog_bar=True, logger=True)
+        self.log("train_mae", unscaled_mae, prog_bar=True, logger=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         outputs = self(batch)
         loss = outputs.loss
-        self.log("val_loss", loss, prog_bar=True, logger=True)
         
+        # Calculate scaled MAE (0-1 range)
+        scaled_mae = self.mae_criterion(outputs.logits.squeeze(), batch['labels'].float())
+        
+        # Calculate unscaled MAE (original range)
+        predictions_unscaled = self.unscale_predictions(outputs.logits.squeeze())
+        labels_unscaled = self.unscale_predictions(batch['labels'].float())
+        unscaled_mae = self.mae_criterion(predictions_unscaled, labels_unscaled)
+        
+        # Log both metrics
+        self.log("val_loss", loss, prog_bar=True, logger=True)
+        self.log("val_mae_scaled", scaled_mae, prog_bar=True, logger=True)
+        self.log("val_mae", unscaled_mae, prog_bar=True, logger=True)
+
     def test_step(self, batch, batch_idx):
         outputs = self(batch)
         loss = outputs.loss
+        
+        # Calculate scaled MAE (0-1 range)
+        scaled_mae = self.mae_criterion(outputs.logits.squeeze(), batch['labels'].float())
+        
+        # Calculate unscaled MAE (original range)
+        predictions_unscaled = self.unscale_predictions(outputs.logits.squeeze())
+        labels_unscaled = self.unscale_predictions(batch['labels'].float())
+        unscaled_mae = self.mae_criterion(predictions_unscaled, labels_unscaled)
+        
+        # Log both metrics
         self.log("test_loss", loss, prog_bar=True, logger=True)
+        self.log("test_mae_scaled", scaled_mae, prog_bar=True, logger=True)
+        self.log("test_mae", unscaled_mae, prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         return torch.optim.AdamW(self.parameters(), lr=self.learning_rate)

@@ -7,12 +7,24 @@ import numpy as np
 from torch_geometric.utils import from_smiles
 
 class GraphDataset(Dataset):
-    def __init__(self, dataframe):
+    def __init__(self, dataframe: pd.DataFrame):
         """
         Args:
             dataframe (pd.DataFrame): The DataFrame containing the dataset.
         """
         self.dataframe = dataframe
+        # Calculate scaling factors
+        self.max_ri = self.dataframe['ri'].max()
+        self.min_ri = self.dataframe['ri'].min()
+        print(f"RI range: min={self.min_ri}, max={self.max_ri}")
+
+    def scale_ri(self, value):
+        """Scale RI value to 0-1 range"""
+        return (value - self.min_ri) / (self.max_ri - self.min_ri)
+    
+    def unscale_ri(self, scaled_value):
+        """Convert scaled value back to original range"""
+        return scaled_value * (self.max_ri - self.min_ri) + self.min_ri
 
     def __len__(self):
         return len(self.dataframe)
@@ -21,17 +33,20 @@ class GraphDataset(Dataset):
         row = self.dataframe.iloc[idx]
         smiles = row["smiles"]
         try:
-            graph_data = from_smiles(smiles)  # Convert SMILES to PyG Data object
-            if graph_data.num_edges == 0:  # Handle molecules with no edges
+            graph_data = from_smiles(smiles)
+            if graph_data.num_edges == 0:
                 print(f"Skipping molecule with no edges: {smiles}")
                 return None
+
+            # Scale the RI value
+            scaled_ri = self.scale_ri(row["ri"])
 
             return {
                 "edge_index": graph_data["edge_index"],
                 "num_nodes": graph_data.num_nodes,
-                "labels": np.array([float(row["ri"])], dtype=np.float32),  # Retention Index to predict
-                "node_feat": graph_data["x"],  # Node features
-                "edge_attr": graph_data["edge_attr"],  # Edge features
+                "labels": np.array([float(scaled_ri)], dtype=np.float32),
+                "node_feat": graph_data["x"],
+                "edge_attr": graph_data["edge_attr"],
             }
         except Exception as e:
             print(f"Error processing SMILES: {smiles}, Error: {e}")

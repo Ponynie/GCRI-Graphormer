@@ -7,9 +7,9 @@ from pytorch_lightning.loggers import WandbLogger
 from hparam import Hyperparameters
 import torch
 
-torch.set_float32_matmul_precision('high')
+# torch.set_float32_matmul_precision('high')
 # Path to the dataset CSV file
-csv_path = "data/NP-LRI-RAMP-G-C.csv"
+csv_path = "data/syntatics.csv"
 check_mode = Hyperparameters.check_mode
 
 # Initialize the data module
@@ -46,7 +46,7 @@ else:
                                       pretrain_num_classes=1)
 
 trainer = Trainer(devices='auto',
-                  accelerator='auto',
+                  accelerator='cpu',
                   max_epochs=Hyperparameters.max_epoch,
                   min_epochs=Hyperparameters.min_epoch,
                   logger=wandb_logger,
