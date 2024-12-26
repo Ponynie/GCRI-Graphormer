@@ -5,7 +5,9 @@ from transformers import GraphormerConfig
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 from hparam import Hyperparameters
+import torch
 
+torch.set_float32_matmul_precision('high')
 # Path to the dataset CSV file
 csv_path = "data/NP-LRI-RAMP-G-C.csv"
 check_mode = Hyperparameters.check_mode
