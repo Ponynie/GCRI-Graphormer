@@ -13,6 +13,37 @@ class GraphDataset(Dataset):
             dataframe (pd.DataFrame): The DataFrame containing the dataset.
         """
         self.dataframe = dataframe
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        row = self.dataframe.iloc[idx]
+        smiles = row["smiles"]
+        try:
+            graph_data = from_smiles(smiles) # Convert SMILES to PyG Data object
+            if graph_data.num_edges == 0: # Handle molecules with no edges
+                print(f"Skipping molecule with no edges: {smiles}")
+                return None
+
+            return {
+                "edge_index": graph_data["edge_index"],
+                "num_nodes": graph_data.num_nodes,
+                "labels": np.array([float(row["ri"])], dtype=np.float32),  # Retention Index to predict
+                "node_feat": graph_data["x"], # Node features
+                "edge_attr": graph_data["edge_attr"], # Edge features
+            }
+        except Exception as e:
+            print(f"Error processing SMILES: {smiles}, Error: {e}")
+            return None
+        
+class GraphDatasetScaled(Dataset):
+    def __init__(self, dataframe: pd.DataFrame):
+        """
+        Args:
+            dataframe (pd.DataFrame): The DataFrame containing the dataset.
+        """
+        self.dataframe = dataframe
         # Calculate scaling factors
         self.max_ri = self.dataframe['ri'].max()
         self.min_ri = self.dataframe['ri'].min()
@@ -51,8 +82,9 @@ class GraphDataset(Dataset):
         except Exception as e:
             print(f"Error processing SMILES: {smiles}, Error: {e}")
             return None
+
 class GraphormerDataModule(pl.LightningDataModule):
-    def __init__(self, csv_path, batch_size=32, train_split=0.8, val_split=0.1, test_split=0.1):
+    def __init__(self, csv_path, batch_size=32, train_split=0.8, val_split=0.1, test_split=0.1, scale_ri=False):
         """
         Args:
             csv_path: Path to the CSV file containing the dataset
@@ -67,6 +99,7 @@ class GraphormerDataModule(pl.LightningDataModule):
         self.train_split = train_split
         self.val_split = val_split
         self.test_split = test_split
+        self.scale_ri = scale_ri
         self.data_collator = GraphormerDataCollator()
 
     def prepare_data(self):
@@ -75,7 +108,10 @@ class GraphormerDataModule(pl.LightningDataModule):
         """
         # Step 1: Read CSV file
         self.data_df = pd.read_csv(self.csv_path)
-        self.pytorch_dataset = GraphDataset(self.data_df)
+        if self.scale_ri:
+            self.pytorch_dataset = GraphDatasetScaled(self.data_df)
+        else:
+            self.pytorch_dataset = GraphDataset(self.data_df)
 
     def setup(self, stage=None):
         """

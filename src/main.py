@@ -1,4 +1,4 @@
-from model import GraphormerLightningModule
+from model import GraphormerLightningModule, GraphormerLightningModuleScaled
 from datamodule import GraphormerDataModule
 from pytorch_lightning import Trainer
 from transformers import GraphormerConfig
@@ -7,9 +7,9 @@ from pytorch_lightning.loggers import WandbLogger
 from hparam import Hyperparameters
 import torch
 
-# torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision('high')
 # Path to the dataset CSV file
-csv_path = "data/syntatics.csv"
+csv_path = "data/NP-LRI-RAMP-G-C.csv"
 check_mode = Hyperparameters.check_mode
 
 # Initialize the data module
@@ -19,6 +19,7 @@ data_module = GraphormerDataModule(
     train_split=Hyperparameters.train_size,
     val_split=Hyperparameters.val_size,
     test_split=Hyperparameters.test_size,
+    scale_ri=Hyperparameters.scale_ri
 )
 
 # Prepare and set up the data
@@ -37,22 +38,27 @@ config = GraphormerConfig(num_classes=1,
                           num_attention_heads=Hyperparameters.num_attention_heads,)
 
 # Instantiate model and trainer
-if not Hyperparameters.pretrain:
-    model = GraphormerLightningModule(config=config, learning_rate=Hyperparameters.learning_rate)
-else:
-    model = GraphormerLightningModule(config=None, learning_rate=Hyperparameters.learning_rate, 
-                                      pretrain=True, 
-                                      model_name=Hyperparameters.pretrain_model, 
-                                      pretrain_num_classes=1)
+base_params = {
+    "config": None if Hyperparameters.pretrain else config,
+    "learning_rate": Hyperparameters.learning_rate,
+    }
+if Hyperparameters.pretrain:
+    base_params.update({
+        "pretrain": True,
+        "model_name": Hyperparameters.pretrain_model,
+        "pretrain_num_classes": 1,
+        })
+model_class = (GraphormerLightningModuleScaled if Hyperparameters.scale_ri else GraphormerLightningModule)
+model = model_class(**base_params)        
 
 trainer = Trainer(devices='auto',
-                  accelerator='cpu',
+                  accelerator='auto',
                   max_epochs=Hyperparameters.max_epoch,
                   min_epochs=Hyperparameters.min_epoch,
                   logger=wandb_logger,
                   callbacks=[lr_monitor, check_point],
                   fast_dev_run=check_mode,
-                  log_every_n_steps=50)
+                  log_every_n_steps=25)
 
 # Train and test the model
 trainer.fit(model, datamodule=data_module)
