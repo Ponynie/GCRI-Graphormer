@@ -5,7 +5,6 @@ import os
 class Hyperparameters:
     check_mode = False
     pretrain = True
-    scale_ri = True
     pretrain_model = "clefourrier/pcqm4mv2_graphormer_base"
     max_epoch = 50
     min_epoch = 5

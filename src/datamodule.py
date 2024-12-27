@@ -36,55 +36,8 @@ class GraphDataset(Dataset):
         except Exception as e:
             print(f"Error processing SMILES: {smiles}, Error: {e}")
             return None
-        
-class GraphDatasetScaled(Dataset):
-    def __init__(self, dataframe: pd.DataFrame):
-        """
-        Args:
-            dataframe (pd.DataFrame): The DataFrame containing the dataset.
-        """
-        self.dataframe = dataframe
-        # Calculate scaling factors
-        self.max_ri = self.dataframe['ri'].max()
-        self.min_ri = self.dataframe['ri'].min()
-        print(f"RI range: min={self.min_ri}, max={self.max_ri}")
-
-    def scale_ri(self, value):
-        """Scale RI value to 0-1 range"""
-        return (value - self.min_ri) / (self.max_ri - self.min_ri)
-    
-    def unscale_ri(self, scaled_value):
-        """Convert scaled value back to original range"""
-        return scaled_value * (self.max_ri - self.min_ri) + self.min_ri
-
-    def __len__(self):
-        return len(self.dataframe)
-
-    def __getitem__(self, idx):
-        row = self.dataframe.iloc[idx]
-        smiles = row["smiles"]
-        try:
-            graph_data = from_smiles(smiles)
-            if graph_data.num_edges == 0:
-                print(f"Skipping molecule with no edges: {smiles}")
-                return None
-
-            # Scale the RI value
-            scaled_ri = self.scale_ri(row["ri"])
-
-            return {
-                "edge_index": graph_data["edge_index"],
-                "num_nodes": graph_data.num_nodes,
-                "labels": np.array([float(scaled_ri)], dtype=np.float32),
-                "node_feat": graph_data["x"],
-                "edge_attr": graph_data["edge_attr"],
-            }
-        except Exception as e:
-            print(f"Error processing SMILES: {smiles}, Error: {e}")
-            return None
-
 class GraphormerDataModule(pl.LightningDataModule):
-    def __init__(self, csv_path, batch_size=32, train_split=0.8, val_split=0.1, test_split=0.1, scale_ri=False):
+    def __init__(self, csv_path, batch_size=32, train_split=0.8, val_split=0.1, test_split=0.1):
         """
         Args:
             csv_path: Path to the CSV file containing the dataset
@@ -99,7 +52,6 @@ class GraphormerDataModule(pl.LightningDataModule):
         self.train_split = train_split
         self.val_split = val_split
         self.test_split = test_split
-        self.scale_ri = scale_ri
         self.data_collator = GraphormerDataCollator()
 
     def prepare_data(self):
@@ -108,10 +60,7 @@ class GraphormerDataModule(pl.LightningDataModule):
         """
         # Step 1: Read CSV file
         self.data_df = pd.read_csv(self.csv_path)
-        if self.scale_ri:
-            self.pytorch_dataset = GraphDatasetScaled(self.data_df)
-        else:
-            self.pytorch_dataset = GraphDataset(self.data_df)
+        self.pytorch_dataset = GraphDataset(self.data_df)
 
     def setup(self, stage=None):
         """

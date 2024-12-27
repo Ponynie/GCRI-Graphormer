@@ -7,7 +7,7 @@ from pytorch_lightning.loggers import WandbLogger
 from hparam import Hyperparameters
 import torch
 
-torch.set_float32_matmul_precision('high')
+torch.set_float32_matmul_precision('medium')
 # Path to the dataset CSV file
 csv_path = "data/NP-LRI-RAMP-G-C.csv"
 check_mode = Hyperparameters.check_mode
@@ -19,7 +19,6 @@ data_module = GraphormerDataModule(
     train_split=Hyperparameters.train_size,
     val_split=Hyperparameters.val_size,
     test_split=Hyperparameters.test_size,
-    scale_ri=Hyperparameters.scale_ri
 )
 
 # Prepare and set up the data
@@ -48,8 +47,7 @@ if Hyperparameters.pretrain:
         "model_name": Hyperparameters.pretrain_model,
         "pretrain_num_classes": 1,
         })
-model_class = (GraphormerLightningModuleScaled if Hyperparameters.scale_ri else GraphormerLightningModule)
-model = model_class(**base_params)        
+model = GraphormerLightningModule(**base_params)        
 
 trainer = Trainer(devices='auto',
                   accelerator='auto',
