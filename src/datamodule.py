@@ -37,7 +37,7 @@ class GraphDataset(Dataset):
             print(f"Error processing SMILES: {smiles}, Error: {e}")
             return None
 class GraphormerDataModule(pl.LightningDataModule):
-    def __init__(self, csv_path, batch_size=32, train_split=0.8, val_split=0.1, test_split=0.1):
+    def __init__(self, csv_path, batch_size=32, train_split=0.8, val_split=0.1, test_split=0.1, num_workers=1):
         """
         Args:
             csv_path: Path to the CSV file containing the dataset
@@ -52,6 +52,7 @@ class GraphormerDataModule(pl.LightningDataModule):
         self.train_split = train_split
         self.val_split = val_split
         self.test_split = test_split
+        self.num_workers = num_workers
         self.data_collator = GraphormerDataCollator()
 
     def prepare_data(self):
@@ -92,6 +93,7 @@ class GraphormerDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             collate_fn=self.data_collator,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
@@ -100,6 +102,7 @@ class GraphormerDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             collate_fn=self.data_collator,
+            num_workers=self.num_workers,
         )
 
     def test_dataloader(self):
@@ -108,4 +111,5 @@ class GraphormerDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             collate_fn=self.data_collator,
+            num_workers=self.num_workers,
         )

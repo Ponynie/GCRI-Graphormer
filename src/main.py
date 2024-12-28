@@ -1,4 +1,4 @@
-from model import GraphormerLightningModule, GraphormerLightningModuleScaled
+from model import GraphormerLightningModule
 from datamodule import GraphormerDataModule
 from pytorch_lightning import Trainer
 from transformers import GraphormerConfig
@@ -19,6 +19,7 @@ data_module = GraphormerDataModule(
     train_split=Hyperparameters.train_size,
     val_split=Hyperparameters.val_size,
     test_split=Hyperparameters.test_size,
+    num_workers=Hyperparameters.num_workers,
 )
 
 # Prepare and set up the data
@@ -31,23 +32,28 @@ wandb_logger = WandbLogger(project='Graphormer-Molecule', save_dir='wandb_log')
 check_point = ModelCheckpoint(monitor='val_loss')
     
 # Model configuration
-config = GraphormerConfig(num_classes=1, 
-                          num_hidden_layers=Hyperparameters.num_hidden_layers, 
-                          hidden_size=Hyperparameters.hidden_size, 
-                          num_attention_heads=Hyperparameters.num_attention_heads,)
+config = GraphormerConfig(
+    num_classes=1, 
+    num_layers=Hyperparameters.num_layers,
+    embedding_dim=Hyperparameters.embedding_dim,
+    ffn_embedding_dim=Hyperparameters.ffn_embedding_dim,
+    num_attention_heads=Hyperparameters.num_attention_heads,
+    dropout=Hyperparameters.dropout
+)
 
 # Instantiate model and trainer
 base_params = {
     "config": None if Hyperparameters.pretrain else config,
     "learning_rate": Hyperparameters.learning_rate,
-    }
-if Hyperparameters.pretrain:
-    base_params.update({
-        "pretrain": True,
-        "model_name": Hyperparameters.pretrain_model,
-        "pretrain_num_classes": 1,
-        })
-model = GraphormerLightningModule(**base_params)        
+    "lr_patience": Hyperparameters.lr_patience,
+    "lr_factor": Hyperparameters.lr_factor,
+    "weight_decay": Hyperparameters.weight_decay,
+    "pretrain": Hyperparameters.pretrain,
+    "model_name": Hyperparameters.pretrain_model if Hyperparameters.pretrain else None,
+    "pretrain_num_classes": 1
+}
+
+model = GraphormerLightningModule(**base_params)     
 
 trainer = Trainer(devices='auto',
                   accelerator='auto',
