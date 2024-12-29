@@ -1,11 +1,11 @@
 import pandas as pd
 from torch_geometric.utils import from_smiles
-from torch.utils.data import Dataset
 from datasets import Dataset as HFDataset
 import numpy as np
+from torch.utils.data import Dataset, DataLoader, random_split
 
 # Step 1: Read the CSV file
-csv_path = "data/syntatics.csv"
+csv_path = "data/NP-LRI-RAMP-G-C.csv"
 data_df = pd.read_csv(csv_path)
 
 # Step 2: Create a PyTorch Dataset
@@ -57,50 +57,56 @@ from transformers.models.graphormer.collating_graphormer import preprocess_item,
 # Apply preprocessing
 dataset_processed = hf_dataset.map(preprocess_item, batched=False)
 
-from transformers import GraphormerConfig, GraphormerForGraphClassification
+#split the Dataset
+dataset_length = len(dataset_processed)
+train_size = int(dataset_length * 0.8)
+val_size = int(dataset_length * 0.1)
+test_size = dataset_length - train_size - val_size
 
-# Define a new configuration
-config = GraphormerConfig(
-    num_classes=1,  # Number of output classes for the downstream task
-    num_hidden_layers=2,  # You can adjust the model architecture as needed
-    hidden_size=768,
-    num_attention_heads=1,
-    intermediate_size=768,
+train_dataset, val_dataset, test_dataset = random_split(
+    dataset_processed, [train_size, val_size, test_size]
 )
 
-# Initialize a Graphormer model with the new configuration
-model = GraphormerForGraphClassification(config)
+from transformers import GraphormerConfig, GraphormerForGraphClassification
+
+# # Define a new configuration
+# config = GraphormerConfig(
+#     num_classes=1,  # Number of output classes for the downstream task
+#     num_hidden_layers=2,  # You can adjust the model architecture as needed
+#     hidden_size=768,
+#     num_attention_heads=1,
+#     intermediate_size=768,
+# )
+
+# # Initialize a Graphormer model with the new configuration
+# model = GraphormerForGraphClassification(config)
+
+model = GraphormerForGraphClassification.from_pretrained(
+    "clefourrier/pcqm4mv2_graphormer_base",
+    num_classes=1, # num_classes for the downstream task 
+    ignore_mismatched_sizes=True,
+)
 
 from transformers import TrainingArguments, Trainer
 
-# training_args = TrainingArguments(
-#     "graph-classification",
-#     logging_dir="graph-classification",
-#     per_device_train_batch_size=64,
-#     per_device_eval_batch_size=64,
-#     auto_find_batch_size=True, # batch size can be changed automatically to prevent OOMs
-#     gradient_accumulation_steps=10,
-#     dataloader_num_workers=4, #1, 
-#     num_train_epochs=20,
-#     evaluation_strategy="epoch",
-#     logging_strategy="epoch",
-#     push_to_hub=False,
-# )
-
 training_args = TrainingArguments(
-    "GCRI_Graphormer",
-    per_device_train_batch_size=2,
-    num_train_epochs=1,  # Only perform one step
-    evaluation_strategy="no",  # Skip evaluation to speed up the test
-    logging_strategy="no",  # Skip logging to speed up the test
-    push_to_hub=False,  # Disable pushing to hub
-    use_cpu=True,  
+    "HuggingFaceTrainer", 
+    logging_dir="huggingface_logs",
+    per_device_train_batch_size=32,
+    per_device_eval_batch_size=32,
+    auto_find_batch_size=True, # batch size can be changed automatically to prevent OOMs
+    dataloader_num_workers=8, 
+    num_train_epochs=20,
+    evaluation_strategy="epoch",
+    logging_strategy="epoch",
+    push_to_hub=False,
 )
 
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset=dataset_processed,
+    train_dataset=train_dataset,
+    eval_dataset=val_dataset,
     data_collator=GraphormerDataCollator(),
 )
 

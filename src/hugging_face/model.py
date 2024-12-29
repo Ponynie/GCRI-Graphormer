@@ -58,19 +58,19 @@ class GraphormerLightningModule(pl.LightningModule):
             lr=self.learning_rate,
             weight_decay=self.weight_decay  # Adding weight decay here
         )
-        
-        # Scheduler configuration for ReduceLROnPlateau
+
+        # Cyclic Learning Rate Scheduler
         scheduler = {
-            'scheduler': torch.optim.lr_scheduler.ReduceLROnPlateau(
-                optimizer, 
-                mode='min',  # 'min' since we want to reduce when val_loss decreases
-                factor=self.lr_factor,  # Reduce the learning rate by a factor
-                patience=self.lr_patience,  # Number of validation steps with no improvement
-                verbose=True
+            'scheduler': torch.optim.lr_scheduler.CyclicLR(
+                optimizer,
+                base_lr=self.learning_rate * self.lr_factor,  # Lower bound of the cycle
+                max_lr=self.learning_rate,  # Upper bound of the cycle
+                step_size_up=1000,  # Number of iterations to reach max_lr
+                mode='triangular',  # Triangular LR schedule
+                cycle_momentum=False,  # Set to False for AdamW optimizer
             ),
-            'monitor': 'train_loss',  # Metric to monitor
-            'interval': 'step',
-            'frequency': 100
+            'interval': 'step',  # Change learning rate after every step
+            'frequency': 1  # Apply this scheduler at every step
         }
         
         return [optimizer], [scheduler]
